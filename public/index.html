@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Laptop Repair Tracker</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Laptop Repair Tracker</h1>
+      <p>Open tickets, track motherboard repair progress, receive completion alerts, and pay in-app.</p>
+
+      <section>
+        <h2>Create Ticket (Client)</h2>
+        <form id="ticket-form">
+          <input required name="customerName" placeholder="Customer name" />
+          <input required type="email" name="email" placeholder="Email" />
+          <input required name="laptopModel" placeholder="Laptop model" />
+          <textarea required name="issueDescription" placeholder="Issue description"></textarea>
+          <input required type="number" min="0" name="amountDue" placeholder="Amount due" />
+          <button type="submit">Open Ticket</button>
+        </form>
+        <pre id="created-ticket"></pre>
+      </section>
+
+      <section>
+        <h2>Track Ticket (Client)</h2>
+        <form id="track-form">
+          <input required name="ticketId" placeholder="Ticket ID" />
+          <button type="submit">Check Progress</button>
+        </form>
+        <pre id="ticket-status"></pre>
+        <button id="pay-button" hidden>Pay Now</button>
+      </section>
+
+      <section>
+        <h2>Alerts (Client)</h2>
+        <form id="alerts-form">
+          <input required type="email" name="email" placeholder="Email" />
+          <button type="submit">View Alerts</button>
+        </form>
+        <pre id="alerts"></pre>
+      </section>
+
+      <section>
+        <h2>Update Motherboard Progress (Technician)</h2>
+        <form id="tech-form">
+          <input required name="ticketId" placeholder="Ticket ID" />
+          <input required name="motherboardStatus" placeholder="Status: Diagnosing / Repairing / Testing" />
+          <input required type="number" min="0" max="100" name="progressPercent" placeholder="Progress %" />
+          <button type="submit">Update Progress</button>
+        </form>
+        <pre id="tech-result"></pre>
+      </section>
+    </main>
+
+    <script>
+      const ticketForm = document.getElementById('ticket-form');
+      const createdTicket = document.getElementById('created-ticket');
+      const trackForm = document.getElementById('track-form');
+      const ticketStatus = document.getElementById('ticket-status');
+      const payButton = document.getElementById('pay-button');
+      const alertsForm = document.getElementById('alerts-form');
+      const alerts = document.getElementById('alerts');
+      const techForm = document.getElementById('tech-form');
+      const techResult = document.getElementById('tech-result');
+
+      let currentTicketId = '';
+
+      ticketForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const formData = new FormData(ticketForm);
+        const payload = Object.fromEntries(formData.entries());
+        payload.amountDue = Number(payload.amountDue);
+
+        const response = await fetch('/api/tickets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        createdTicket.textContent = JSON.stringify(data, null, 2);
+        if (data.id) {
+          currentTicketId = data.id;
+        }
+      });
+
+      trackForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const ticketId = new FormData(trackForm).get('ticketId');
+        currentTicketId = ticketId;
+
+        const response = await fetch(`/api/tickets/${ticketId}`);
+        const data = await response.json();
+        ticketStatus.textContent = JSON.stringify(data, null, 2);
+
+        payButton.hidden = !(data.progressPercent === 100 && data.paymentStatus === 'Pending');
+      });
+
+      payButton.addEventListener('click', async () => {
+        if (!currentTicketId) return;
+        const response = await fetch(`/api/tickets/${currentTicketId}/pay`, { method: 'POST' });
+        const data = await response.json();
+        ticketStatus.textContent = JSON.stringify(data, null, 2);
+        payButton.hidden = true;
+      });
+
+      alertsForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const email = new FormData(alertsForm).get('email');
+        const response = await fetch(`/api/notifications?email=${encodeURIComponent(email)}`);
+        const data = await response.json();
+        alerts.textContent = JSON.stringify(data, null, 2);
+      });
+
+      techForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const formData = new FormData(techForm);
+        const ticketId = formData.get('ticketId');
+        const payload = {
+          motherboardStatus: formData.get('motherboardStatus'),
+          progressPercent: Number(formData.get('progressPercent'))
+        };
+
+        const response = await fetch(`/api/tickets/${ticketId}/progress`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        techResult.textContent = JSON.stringify(data, null, 2);
+      });
+    </script>
+  </body>
+</html>
